@@ -18,7 +18,7 @@ class PredPipe():
     
     def add_noise_and_blur(self):
         img = cv2.imread(self.image)
-        noise = np.random.normal(0, self.noise_and_blur['noise_pctg'], img.shape)git reset --hard HEAD~1
+        noise = np.random.normal(0, self.noise_and_blur['noise_pctg'], img.shape)
         noise = noise.astype('uint8')
         img = cv2.add(img, noise)
         img = cv2.blur(img, (self.noise_and_blur['blur_pctg'], self.noise_and_blur['blur_pctg']))
