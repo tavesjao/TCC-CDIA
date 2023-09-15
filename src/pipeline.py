@@ -22,7 +22,7 @@ class PredPipe():
         noise = noise.astype('uint8')
         img = cv2.add(img, noise)
         img = cv2.blur(img, (self.noise_and_blur['blur_pctg'], self.noise_and_blur['blur_pctg']))
-        cv2.imwrite(f"../data/processed/inputs/{self.path}_noised.jpg", img)
+        cv2.imwrite(f"../data/processed/noisy/{self.path}_noised.jpg", img)
 
         return f"../data/processed/noisy/{self.path}_noised.jpg"
     
