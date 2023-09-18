@@ -71,19 +71,6 @@ class PredPipe():
 
         return img, self.results
 
-    def plot_scores(self, save=False):
-        # plot model scores
-        plt.figure(figsize=(10, 8))
-        plt.hist(self.model_scores)
-        plt.title(f"{self.name} Model Scores")
-        plt.xlabel("Model Scores")
-        plt.ylabel("Frequency")
-        if save:
-            plt.savefig(f"../reports/figures/{self.name}_model_scores.png")
-        plt.show()
-
-
-
 
 
 
