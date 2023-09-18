@@ -19,7 +19,7 @@ class PredPipe():
         }
         self.timestamp = str(int(time.time())) # add timestamp as unique identifier
 
-    def add_noise_and_blur(self, save=True):
+    def add_noise_and_blur(self, save=False):
         image = cv2.imread(self.image_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = image.astype(np.float32) / 255.0
@@ -40,7 +40,7 @@ class PredPipe():
 
     def predict_image(self, add_noise=False, save = True):
         if add_noise:
-            image, noisy_image_path = self.add_noise_and_blur()
+            image, noisy_image_path = self.add_noise_and_blur(save)
             results = self.model.predict(noisy_image_path)
             result = results[0]
             if save:
