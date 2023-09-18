@@ -19,7 +19,7 @@ class PredPipe():
         }
         self.timestamp = str(int(time.time())) # add timestamp as unique identifier
 
-    def add_noise_and_blur(self):
+    def add_noise_and_blur(self, save=True):
         image = cv2.imread(self.image_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = image.astype(np.float32) / 255.0
@@ -32,22 +32,25 @@ class PredPipe():
         image = noise_mask * noise + (1 - noise_mask) * image
         image = (image * 255.0).astype(np.uint8)
         noisy_image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-        noisy_image_path = f"../data/processed/noisy/{self.name}_{str(self.noise_and_blur['noise_pctg'])}_noisy_{self.timestamp}.jpg" # add timestamp to filename
+        if save:
+            noisy_image_path = f"../data/processed/noisy/{self.name}_{str(self.noise_and_blur['noise_pctg'])}_noisy_{self.timestamp}.jpg" # add timestamp to filename
         cv2.imwrite(noisy_image_path, noisy_image)
 
         return image, noisy_image_path
 
-    def predict_image(self, add_noise=False):
+    def predict_image(self, add_noise=False, save = True):
         if add_noise:
             image, noisy_image_path = self.add_noise_and_blur()
             results = self.model.predict(noisy_image_path)
             result = results[0]
-            predicted_image_path = f"../data/processed/outputs/{self.name}_{str(self.noise_and_blur['noise_pctg'])}_noisy_predicted_{self.timestamp}.jpg"
+            if save:
+                predicted_image_path = f"../data/processed/outputs/{self.name}_{str(self.noise_and_blur['noise_pctg'])}_noisy_predicted_{self.timestamp}.jpg"
         
         else:
             results = self.model.predict(self.image_path)
             result = results[0]
-            predicted_image_path = f"../data/processed/outputs/{self.name}_predicted_{self.timestamp}.jpg"
+            if save:
+                predicted_image_path = f"../data/processed/outputs/{self.name}_predicted_{self.timestamp}.jpg"
         
         #save model scores
         for box in result.boxes:
