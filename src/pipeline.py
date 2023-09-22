@@ -74,8 +74,10 @@ class PredPipe():
 
         return img, self.results
 
+        
 
 
+  
 
 
         
