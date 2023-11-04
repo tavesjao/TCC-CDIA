@@ -1,120 +1,139 @@
 import torch
 from torch import nn
-from torchvision import datasets, transforms
-import torchvision
-import torch.nn.functional as F
-import torch.optim as optim
+from torch.nn import (
+    Module, 
+    Sequential, 
+    ConvTranspose2d, 
+    BatchNorm2d, 
+    ReLU, 
+    Tanh, 
+    Conv2d, 
+    LeakyReLU, 
+    Sigmoid)
 import numpy as np
 import os
+import matplotlib.pyplot as plt
 
-class Generator(nn.Module):
-    def __init__(self, latent_dim, img_shape):
-        super(Generator, self).__init__()
-        self.latent_dim = latent_dim
-        self.img_shape = img_shape
-
-        self.model = nn.Sequential(
-            nn.Linear(self.latent_dim, 128),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(128, 256),
-            nn.BatchNorm1d(256, 0.8),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(256, 512),
-            nn.BatchNorm1d(512, 0.8),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(512, 1024),
-            nn.BatchNorm1d(1024, 0.8),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(1024, int(np.prod(self.img_shape))),
-            nn.Tanh(),
+class Generator(Module):
+    def __init__(self):
+ 
+        # calling constructor of parent class
+        super().__init__()
+ 
+        self.gen = Sequential(
+          ConvTranspose2d(in_channels = 100, out_channels = 512 , kernel_size = 4, stride = 1, padding = 0, bias = False),
+          # the output from the above will be b_size ,512, 4,4
+          BatchNorm2d(num_features = 512), # From an input of size (b_size, C, H, W), pick num_features = C
+          ReLU(inplace = True),
+ 
+          ConvTranspose2d(in_channels = 512, out_channels = 256 , kernel_size = 4, stride = 2, padding = 1, bias = False),
+          # the output from the above will be b_size ,256, 8,8
+          BatchNorm2d(num_features = 256),
+          ReLU(inplace = True),
+ 
+          ConvTranspose2d(in_channels = 256, out_channels = 128 , kernel_size = 4, stride = 2, padding = 1, bias = False),
+          # the output from the above will be b_size ,128, 16,16
+          BatchNorm2d(num_features = 128),
+          ReLU(inplace = True),
+ 
+          ConvTranspose2d(in_channels = 128, out_channels = 3 , kernel_size = 4, stride = 2, padding = 1, bias = False),
+          # the output from the above will be b_size ,3, 32,32
+          Tanh()
+         
         )
-
-    def forward(self, z):
-        img = self.model(z)
-        img = img.view(img.size(0), *self.img_shape)
-        return img
+ 
+    def forward(self, input):
+        return self.gen(input)
     
-class Discriminator(nn.Module):
-    def __init__(self, img_shape):
-        super(Discriminator, self).__init__()
-        self.img_shape = img_shape
-
-        self.model = nn.Sequential(
-            nn.Linear(int(np.prod(self.img_shape)), 512),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(512, 256),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(256, 1),
-            nn.Sigmoid(),
+class Discriminator(Module):
+    def __init__(self):
+ 
+        super().__init__()
+        self.dis = Sequential(
+ 
+            # input is (3, 32, 32)
+            Conv2d(in_channels = 3, out_channels = 32, kernel_size = 4, stride = 2, padding = 1, bias=False),
+            # ouput from above layer is b_size, 32, 16, 16
+            LeakyReLU(0.2, inplace=True),
+ 
+            Conv2d(in_channels = 32, out_channels = 32*2, kernel_size = 4, stride = 2, padding = 1, bias=False),
+            # ouput from above layer is b_size, 32*2, 8, 8
+            BatchNorm2d(32 * 2),
+            LeakyReLU(0.2, inplace=True),
+ 
+            Conv2d(in_channels = 32*2, out_channels = 32*4, kernel_size = 4, stride = 2, padding = 1, bias=False),
+            # ouput from above layer is b_size, 32*4, 4, 4
+            BatchNorm2d(32 * 4),
+            LeakyReLU(0.2, inplace=True),
+ 
+            Conv2d(in_channels = 32*4, out_channels = 32*8, kernel_size = 4, stride = 2, padding = 1, bias=False),
+            # ouput from above layer is b_size, 256, 2, 2
+            # NOTE: spatial size of this layer is 2x2, hence in the final layer, the kernel size must be 2 instead (or smaller than) 4
+            BatchNorm2d(32 * 8),
+            LeakyReLU(0.2, inplace=True),
+ 
+            Conv2d(in_channels = 32*8, out_channels = 1, kernel_size = 2, stride = 2, padding = 0, bias=False),
+            # ouput from above layer is b_size, 1, 1, 1
+            Sigmoid()
         )
+     
+    def forward(self, input):
+        return self.dis(input)
 
-    def forward(self, img):
-        img_flat = img.view(img.size(0), -1)
-        validity = self.model(img_flat)
-        return validity
-    
-class GAN():
-    def __init__(self, latent_dim, img_shape):
-        self.latent_dim = latent_dim
-        self.img_shape = img_shape
-        self.generator = Generator(self.latent_dim, self.img_shape)
-        self.discriminator = Discriminator(self.img_shape)
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.generator.to(self.device)
-        self.discriminator.to(self.device)
-        self.criterion = nn.BCELoss()
-        self.optimizer_G = optim.Adam(self.generator.parameters(), lr=0.0002, betas=(0.5, 0.999))
-        self.optimizer_D = optim.Adam(self.discriminator.parameters(), lr=0.0002, betas=(0.5, 0.999))
-        self.Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
-        
-    def train(self, n_epochs, batch_size, sample_interval=100):
-        dataloader = self.load_data(batch_size)
-        for epoch in range(n_epochs):
-            for i, (imgs, _) in enumerate(dataloader):
-                self.train_discriminator(imgs)
-                self.train_generator(batch_size)
-                if i % sample_interval == 0:
-                    print(f"[Epoch {epoch}/{n_epochs}] [Batch {i}/{len(dataloader)}] [D loss: {self.loss_D.item():.6f}] [G loss: {self.loss_G.item():.6f}]")
-                    self.sample_images(epoch, i)
-                    
-    def train_discriminator(self, imgs):
-        self.discriminator.zero_grad()
-        real_imgs = imgs.to(self.device)
-        valid = torch.ones(real_imgs.size(0), 1).to(self.device)
-        fake = torch.zeros(real_imgs.size(0), 1).to(self.device)
-        real_loss = self.criterion(self.discriminator(real_imgs), valid)
-        z = torch.randn(real_imgs.size(0), self.latent_dim).to(self.device)
-        fake_imgs = self.generator(z)
-        fake_loss = self.criterion(self.discriminator(fake_imgs.detach()), fake)
-        self.loss_D = (real_loss + fake_loss) / 2
-        self.loss_D.backward()
-        self.optimizer_D.step()
-        
-    def train_generator(self, batch_size):
-        self.generator.zero_grad()
-        valid = torch.ones(batch_size, 1).to(self.device)
-        z = torch.randn(batch_size, self.latent_dim).to(self.device)
-        fake_imgs = self.generator(z)
-        self.loss_G = self.criterion(self.discriminator(fake_imgs), valid)
-        self.loss_G.backward()
-        self.optimizer_G.step()
+class GAN:
+    def __init__(self, dataloader, device, netD, netG, opt_D, opt_G, loss, plot_images):
+        self.dataloader = dataloader
+        self.device = device
+        self.netD = netD
+        self.netG = netG
+        self.opt_D = opt_D
+        self.opt_G = opt_G
+        self.loss = loss
+        self.plot_images = plot_images
+        self.d_losses = []
+        self.g_losses = []
 
-    def sample_images(self, epoch, i):
-        os.makedirs('images', exist_ok=True)
-        z = torch.randn(5, self.latent_dim).to(self.device)
-        gen_imgs = self.generator(z)
-        torchvision.utils.save_image(gen_imgs.data, f"images/{epoch}_{i}.png", nrow=5, normalize=True)
+    def train(self, epochs):
+        print_interval = 100
+        for e in range(epochs):
+            for i, b in enumerate(self.dataloader):
+                d_loss = self.update_discriminator(b)
+                g_loss = self.update_generator(b)
+                self.d_losses.append(d_loss.item())
+                self.g_losses.append(g_loss.item())
+                if e % print_interval == 0 and i == 0:
+                    self.plot_generator_images(b)
 
-    def load_data(self, batch_size):
-        os.makedirs('../data/processed/train/', exist_ok=True)
-        dataset = datasets.ImageFolder(root='../data/frames', transform=transforms.Compose([
-            transforms.Resize((128, 128)),
-            transforms.ToTensor(),
-            transforms.Normalize((0.5,), (0.5,)),
-        ]))
-        dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
-        return dataloader
-    
-    def save_model(self):
-        torch.save(self.generator.state_dict(), '../models/generator.pth')
-        torch.save(self.discriminator.state_dict(), '../models/discriminator.pth')
+    def update_discriminator(self, b):
+        self.opt_D.zero_grad()
+        yhat = self.netD(b.to(self.device)).view(-1)
+        target = torch.ones(len(b), dtype=torch.float, device=self.device)
+        loss_real = self.loss(yhat, target)
+        loss_real.backward()
+
+        noise = torch.randn(len(b), 100, 1, 1, device=self.device)
+        fake_img = self.netG(noise)
+        yhat = self.netD(fake_img.detach()).view(-1)
+        target = torch.zeros(len(b), dtype=torch.float, device=self.device)
+        loss_fake = self.loss(yhat, target)
+        loss_fake.backward()
+
+        self.opt_D.step()
+        return loss_real + loss_fake
+
+    def update_generator(self, b):
+        self.opt_G.zero_grad()
+        noise = torch.randn(len(b), 100, 1, 1, device=self.device)
+        fake_img = self.netG(noise)
+        yhat = self.netD(fake_img).view(-1)
+        target = torch.ones(len(b), dtype=torch.float, device=self.device)
+        loss_gen = self.loss(yhat, target)
+        loss_gen.backward()
+        self.opt_G.step()
+        return loss_gen
+
+    def plot_generator_images(self, b):
+        noise = torch.randn(len(b), 100, 1, 1, device=self.device)
+        fake_img = self.netG(noise)
+        img_plot = np.transpose(fake_img.detach().cpu(), (0,2,3,1))
+        self.plot_images(img_plot)
