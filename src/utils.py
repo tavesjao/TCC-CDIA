@@ -26,4 +26,3 @@ def id_images(pasta='../data/frames/images'):
     with open(arquivo_controle, 'w') as arquivo:
         arquivo.write(str(contador))
 # END: 3f5a6d8b5c7a
-
