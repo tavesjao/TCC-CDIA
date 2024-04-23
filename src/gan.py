@@ -1,139 +1,157 @@
 import torch
-from torch import nn
-from torch.nn import (
-    Module, 
-    Sequential, 
-    ConvTranspose2d, 
-    BatchNorm2d, 
-    ReLU, 
-    Tanh, 
-    Conv2d, 
-    LeakyReLU, 
-    Sigmoid)
-import numpy as np
-import os
+from torch import nn, optim
+from torch.utils.data import DataLoader
+import torchvision.transforms as transforms
+from torchvision.datasets import ImageFolder
 import matplotlib.pyplot as plt
+import os
+import torchvision.utils as vutils
+import numpy as np
 
-class Generator(Module):
-    def __init__(self):
- 
-        # calling constructor of parent class
+class Generator(nn.Module):
+    def __init__(self, z_dim=100, img_channels=3):
         super().__init__()
- 
-        self.gen = Sequential(
-          ConvTranspose2d(in_channels = 100, out_channels = 512 , kernel_size = 4, stride = 1, padding = 0, bias = False),
-          # the output from the above will be b_size ,512, 4,4
-          BatchNorm2d(num_features = 512), # From an input of size (b_size, C, H, W), pick num_features = C
-          ReLU(inplace = True),
- 
-          ConvTranspose2d(in_channels = 512, out_channels = 256 , kernel_size = 4, stride = 2, padding = 1, bias = False),
-          # the output from the above will be b_size ,256, 8,8
-          BatchNorm2d(num_features = 256),
-          ReLU(inplace = True),
- 
-          ConvTranspose2d(in_channels = 256, out_channels = 128 , kernel_size = 4, stride = 2, padding = 1, bias = False),
-          # the output from the above will be b_size ,128, 16,16
-          BatchNorm2d(num_features = 128),
-          ReLU(inplace = True),
- 
-          ConvTranspose2d(in_channels = 128, out_channels = 3 , kernel_size = 4, stride = 2, padding = 1, bias = False),
-          # the output from the above will be b_size ,3, 32,32
-          Tanh()
-         
+        self.gen = nn.Sequential(
+            # input is Z, going into a convolution
+            nn.ConvTranspose2d(z_dim, 512, 4, 1, 0, bias=False),
+            nn.BatchNorm2d(512),
+            nn.ReLU(True),
+            # state size. 512 x 4 x 4
+            nn.ConvTranspose2d(512, 256, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(256),
+            nn.ReLU(True),
+            # state size. 256 x 8 x 8
+            nn.ConvTranspose2d(256, 128, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(128),
+            nn.ReLU(True),
+            # state size. 128 x 16 x 16
+            nn.ConvTranspose2d(128, 64, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(64),
+            nn.ReLU(True),
+            # state size. 64 x 32 x 32
+            nn.ConvTranspose2d(64, img_channels, 4, 2, 1, bias=False),
+            nn.Tanh()
+            # state size. img_channels x 64 x 64
         )
- 
-    def forward(self, input):
-        return self.gen(input)
-    
-class Discriminator(Module):
-    def __init__(self):
- 
-        super().__init__()
-        self.dis = Sequential(
- 
-            # input is (3, 32, 32)
-            Conv2d(in_channels = 3, out_channels = 32, kernel_size = 4, stride = 2, padding = 1, bias=False),
-            # ouput from above layer is b_size, 32, 16, 16
-            LeakyReLU(0.2, inplace=True),
- 
-            Conv2d(in_channels = 32, out_channels = 32*2, kernel_size = 4, stride = 2, padding = 1, bias=False),
-            # ouput from above layer is b_size, 32*2, 8, 8
-            BatchNorm2d(32 * 2),
-            LeakyReLU(0.2, inplace=True),
- 
-            Conv2d(in_channels = 32*2, out_channels = 32*4, kernel_size = 4, stride = 2, padding = 1, bias=False),
-            # ouput from above layer is b_size, 32*4, 4, 4
-            BatchNorm2d(32 * 4),
-            LeakyReLU(0.2, inplace=True),
- 
-            Conv2d(in_channels = 32*4, out_channels = 32*8, kernel_size = 4, stride = 2, padding = 1, bias=False),
-            # ouput from above layer is b_size, 256, 2, 2
-            # NOTE: spatial size of this layer is 2x2, hence in the final layer, the kernel size must be 2 instead (or smaller than) 4
-            BatchNorm2d(32 * 8),
-            LeakyReLU(0.2, inplace=True),
- 
-            Conv2d(in_channels = 32*8, out_channels = 1, kernel_size = 2, stride = 2, padding = 0, bias=False),
-            # ouput from above layer is b_size, 1, 1, 1
-            Sigmoid()
-        )
-     
-    def forward(self, input):
-        return self.dis(input)
 
-class GAN:
-    def __init__(self, dataloader, device, netD, netG, opt_D, opt_G, loss, plot_images):
+    def forward(self, x):
+        return self.gen(x)
+
+class Discriminator(nn.Module):
+    def __init__(self, img_channels=3):
+        super().__init__()
+        self.dis = nn.Sequential(
+            # input is (img_channels) x 64 x 64
+            nn.Conv2d(img_channels, 64, 4, 2, 1, bias=False),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. 64 x 32 x 32
+            nn.Conv2d(64, 128, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(128),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. 128 x 16 x 16
+            nn.Conv2d(128, 256, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(256),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. 256 x 8 x 8
+            nn.Conv2d(256, 512, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(512),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. 512 x 4 x 4
+            nn.Conv2d(512, 1, 4, 1, 0, bias=False),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        return self.dis(x)
+
+class DCGAN():
+    def __init__(self, dataloader, device):
         self.dataloader = dataloader
         self.device = device
-        self.netD = netD
-        self.netG = netG
-        self.opt_D = opt_D
-        self.opt_G = opt_G
-        self.loss = loss
-        self.plot_images = plot_images
-        self.d_losses = []
-        self.g_losses = []
+        print(f'Using device: {self.device}')
+        self.netG = Generator().to(device)  # Define Generator
+        self.netD = Discriminator().to(device)  # Define Discriminator
+        self.optG = optim.Adam(self.netG.parameters(), lr=0.0002, betas=(0.5, 0.999))
+        self.optD = optim.Adam(self.netD.parameters(), lr=0.0002, betas=(0.5, 0.999))
+        
+        self.fixed_noise = torch.randn(64, 100, 1, 1, device=self.device)  # Fixed noise for observing generator progress
+
+        # Initialize weights
+        self.netG.apply(self.weights_init)
+        self.netD.apply(self.weights_init)
 
     def train(self, epochs):
-        print_interval = 100
-        for e in range(epochs):
-            for i, b in enumerate(self.dataloader):
-                d_loss = self.update_discriminator(b)
-                g_loss = self.update_generator(b)
-                self.d_losses.append(d_loss.item())
-                self.g_losses.append(g_loss.item())
-                if e % print_interval == 0 and i == 0:
-                    self.plot_generator_images(b)
+        criterion = nn.BCELoss()
+        G_losses = []
+        D_losses = []
+        img_list = []
 
-    def update_discriminator(self, b):
-        self.opt_D.zero_grad()
-        yhat = self.netD(b.to(self.device)).view(-1)
-        target = torch.ones(len(b), dtype=torch.float, device=self.device)
-        loss_real = self.loss(yhat, target)
-        loss_real.backward()
+        for epoch in range(epochs):
+            for i, (images, _) in enumerate(self.dataloader):
+                # Training Discriminator
+                self.netD.zero_grad()
+                real_images = images.to(self.device)
+                batch_size = real_images.size(0)
+                labels = torch.full((batch_size,), 1., dtype=torch.float, device=self.device)
 
-        noise = torch.randn(len(b), 100, 1, 1, device=self.device)
-        fake_img = self.netG(noise)
-        yhat = self.netD(fake_img.detach()).view(-1)
-        target = torch.zeros(len(b), dtype=torch.float, device=self.device)
-        loss_fake = self.loss(yhat, target)
-        loss_fake.backward()
+                output = self.netD(real_images).view(-1)
+                errD_real = criterion(output, labels)
+                errD_real.backward()
+                D_x = output.mean().item()
 
-        self.opt_D.step()
-        return loss_real + loss_fake
+                noise = torch.randn(batch_size, 100, 1, 1, device=self.device)
+                fake_images = self.netG(noise)
+                labels.fill_(0.)
+                output = self.netD(fake_images.detach()).view(-1)
+                errD_fake = criterion(output, labels)
+                errD_fake.backward()
+                D_G_z1 = output.mean().item()
+                errD = errD_real + errD_fake
+                self.optD.step()
+                torch.nn.utils.clip_grad_norm_(self.netG.parameters(), max_norm=1)
 
-    def update_generator(self, b):
-        self.opt_G.zero_grad()
-        noise = torch.randn(len(b), 100, 1, 1, device=self.device)
-        fake_img = self.netG(noise)
-        yhat = self.netD(fake_img).view(-1)
-        target = torch.ones(len(b), dtype=torch.float, device=self.device)
-        loss_gen = self.loss(yhat, target)
-        loss_gen.backward()
-        self.opt_G.step()
-        return loss_gen
+                # Training Generator
+                self.netG.zero_grad()
+                labels.fill_(1.)  # fake labels are real for generator cost
+                output = self.netD(fake_images).view(-1)
+                errG = criterion(output, labels)
+                errG.backward()
+                D_G_z2 = output.mean().item()
+                self.optG.step()
+                torch.nn.utils.clip_grad_norm_(self.netD.parameters(), max_norm=1)
 
-    def plot_generator_images(self, b):
-        noise = torch.randn(len(b), 100, 1, 1, device=self.device)
-        fake_img = self.netG(noise)
-        img_plot = np.transpose(fake_img.detach().cpu(), (0,2,3,1))
-        self.plot_images(img_plot)
+                # Output training stats
+                if i % 10 == 0:
+                    print(f'[{epoch}/{epochs}][{i}/{len(self.dataloader)}] Loss_D: {errD.item():.4f} Loss_G: {errG.item():.4f} D(x): {D_x:.4f} D(G(z)): {D_G_z1:.4f}/{D_G_z2:.4f}')
+
+                # Check how the generator is doing by saving G's output on fixed_noise
+                if (epoch % 10 == 0) and (i == len(self.dataloader)-1):
+                    with torch.no_grad():
+                        fake = self.netG(self.fixed_noise).detach().cpu()
+                    img_list.append(vutils.make_grid(fake, padding=2, normalize=True))
+                    # Optionally, show or save the image
+                    plt.figure(figsize=(8,8))
+                    plt.axis("off")
+                    plt.title("Generated Images")
+                    plt.imshow(np.transpose(img_list[-1],(1,2,0)))
+                    plt.show()
+
+                # Save Losses for plotting later
+                G_losses.append(errG.item())
+                D_losses.append(errD.item())
+
+            # Save models periodically
+            if epoch % 10 == 0:
+                torch.save(self.netG.state_dict(), f'./generator_epoch_{epoch}.pth')
+                torch.save(self.netD.state_dict(), f'./discriminator_epoch_{epoch}.pth')
+
+        print('Training finished.')
+
+    @staticmethod
+    def weights_init(m):
+        classname = m.__class__.__name__
+        if classname.find('Conv') != -1:
+            nn.init.normal_(m.weight.data, 0.0, 0.02)
+        elif classname.find('BatchNorm') != -1:
+            nn.init.normal_(m.weight.data, 1.0, 0.02)
+            nn.init.constant_(m.bias.data, 0)
