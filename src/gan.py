@@ -142,8 +142,12 @@ class DCGAN():
 
             # Save models periodically
             if epoch % 10 == 0:
-                torch.save(self.netG.state_dict(), f'./generator_epoch_{epoch}.pth')
-                torch.save(self.netD.state_dict(), f'./discriminator_epoch_{epoch}.pth')
+                torch.save(self.netG.state_dict(), f'../models/dcGan/generator_epoch_{epoch}.pth')
+                torch.save(self.netD.state_dict(), f'../models/dcGan/discriminator_epoch_{epoch}.pth')
+
+        torch.save(self.netG.state_dict(), '../models/dcGan/generator_final.pth')
+        torch.save(self.netD.state_dict(), '../models/dcGan/discriminator_final.pth')
+            
 
         print('Training finished.')
 
